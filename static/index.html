@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SENTINEL | Silence Index Investigation System</title>
+    
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css?v=1.0.0">
+</head>
+<body>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon">
+                <i class="fas fa-satellite-dish"></i>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">SENTINEL</span>
+                <span class="brand-sub">Silence Index v1.0.0</span>
+            </div>
+        </div>
+
+        <nav class="nav-menu">
+            <div class="nav-group">
+                <span class="nav-group-title">INVESTIGATION</span>
+                <button class="nav-item active" data-screen="dashboard">
+                    <i class="fas fa-th-large"></i>
+                    <span>Command Center</span>
+                </button>
+                <button class="nav-item" data-screen="chat">
+                    <i class="fas fa-terminal"></i>
+                    <span>AI Analysis</span>
+                    <span class="nav-badge">LIVE</span>
+                </button>
+                <button class="nav-item" data-screen="search">
+                    <i class="fas fa-search"></i>
+                    <span>Case Search</span>
+                </button>
+            </div>
+
+            <div class="nav-group">
+                <span class="nav-group-title">DATA MODULES</span>
+                <button class="nav-item" data-screen="demographics">
+                    <i class="fas fa-users"></i>
+                    <span>Demographics</span>
+                </button>
+                <button class="nav-item" data-screen="geography">
+                    <i class="fas fa-map-marked-alt"></i>
+                    <span>Geographic</span>
+                </button>
+                <button class="nav-item" data-screen="categories">
+                    <i class="fas fa-folder-open"></i>
+                    <span>Categories</span>
+                </button>
+                <button class="nav-item" data-screen="temporal">
+                    <i class="fas fa-clock"></i>
+                    <span>Temporal</span>
+                </button>
+            </div>
+
+            <div class="nav-group">
+                <span class="nav-group-title">TOOLS</span>
+                <button class="nav-item" data-screen="report">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Full Report</span>
+                </button>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="system-status">
+                <span class="status-dot online"></span>
+                <span>QDRANT CONNECTED</span>
+            </div>
+            <div class="footer-info">SENTINEL v1.0.0</div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main">
+        <!-- HEADER -->
+        <header class="header">
+            <div class="header-left">
+                <button class="menu-btn" id="menuBtn">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="header-title">
+                    <h1 id="pageTitle">Command Center</h1>
+                    <span class="header-timestamp" id="timestamp"></span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="header-stat">
+                    <span class="stat-label">CASES</span>
+                    <span class="stat-value" id="headerCases">10,000</span>
+                </div>
+                <div class="header-stat alert">
+                    <span class="stat-label">SILENCED</span>
+                    <span class="stat-value" id="headerSilenced">--</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- CONTENT -->
+        <div class="content">
+            
+            <!-- DASHBOARD SCREEN -->
+            <section id="dashboard" class="screen active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-icon"><i class="fas fa-database"></i></span>
+                            <span class="stat-title">TOTAL CASES</span>
+                        </div>
+                        <div class="stat-body">
+                            <span class="stat-number" id="totalCases">--</span>
+                        </div>
+                    </div>
+                    <div class="stat-card critical">
+                        <div class="stat-header">
+                            <span class="stat-icon"><i class="fas fa-volume-mute"></i></span>
+                            <span class="stat-title">SILENCED</span>
+                        </div>
+                        <div class="stat-body">
+                            <span class="stat-number" id="silencedCount">--</span>
+                            <span class="stat-pct" id="silenceRate">--%</span>
+                        </div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-header">
+                            <span class="stat-icon"><i class="fas fa-chart-line"></i></span>
+                            <span class="stat-title">AVG SCORE</span>
+                        </div>
+                        <div class="stat-body">
+                            <span class="stat-number" id="avgScore">--</span>
+                            <span class="stat-sub">/100</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-icon"><i class="fas fa-hourglass-half"></i></span>
+                            <span class="stat-title">AVG WAIT</span>
+                        </div>
+                        <div class="stat-body">
+                            <span class="stat-number" id="avgDays">--</span>
+                            <span class="stat-sub">days</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert-box">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span id="alertText">Analyzing institutional bias patterns...</span>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fas fa-bolt"></i> Quick Analysis</span>
+                        </div>
+                        <div class="panel-body">
+                            <div class="quick-actions">
+                                <button class="action-btn" onclick="quickAnalysis('Show me income-based bias with a chart')">
+                                    <i class="fas fa-wallet"></i> Income Bias
+                                </button>
+                                <button class="action-btn" onclick="quickAnalysis('Which wards have highest silence rates? Show chart')">
+                                    <i class="fas fa-map"></i> Ward Hotspots
+                                </button>
+                                <button class="action-btn" onclick="quickAnalysis('Analyze caste-based discrimination patterns')">
+                                    <i class="fas fa-users"></i> Caste Analysis
+                                </button>
+                                <button class="action-btn" onclick="quickAnalysis('Show temporal decay - how complaints get ignored over time')">
+                                    <i class="fas fa-clock"></i> Time Decay
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fas fa-chart-bar"></i> Bias Overview</span>
+                        </div>
+                        <div class="panel-body chart-container">
+                            <canvas id="overviewChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CHAT SCREEN -->
+            <section id="chat" class="screen">
+                <div class="chat-layout">
+                    <div class="chat-main">
+                        <div class="chat-panel">
+                            <div class="chat-header">
+                                <div class="chat-title">
+                                    <i class="fas fa-robot"></i>
+                                    <span>SENTINEL AI</span>
+                                    <span class="chat-status">ACTIVE</span>
+                                </div>
+                                <div class="chat-actions">
+                                    <select id="sessionSelect" class="session-select">
+                                        <option value="">New Investigation</option>
+                                    </select>
+                                    <button class="icon-btn" id="newSessionBtn" title="New Session">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                    <button class="icon-btn" id="clearChatBtn" title="Clear Display">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="chat-messages" id="chatMessages">
+                                <div class="message system">
+                                    <div class="message-content">
+                                        <p><strong>SENTINEL INITIALIZED</strong></p>
+                                        <p>Forensic AI analysis system ready. I can investigate:</p>
+                                        <ul>
+                                            <li>Demographic bias (gender, caste, income)</li>
+                                            <li>Geographic patterns by ward</li>
+                                            <li>Category-based discrimination</li>
+                                            <li>Temporal decay analysis</li>
+                                        </ul>
+                                        <p>Request charts by asking "show me a chart of..."</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="chat-suggestions">
+                                <button onclick="sendSuggestion('What is the overall silence rate?')">Overall stats</button>
+                                <button onclick="sendSuggestion('Show income bias chart')">Income chart</button>
+                                <button onclick="sendSuggestion('Which wards are worst?')">Worst wards</button>
+                                <button onclick="sendSuggestion('Analyze gender discrimination')">Gender bias</button>
+                            </div>
+
+                            <div class="chat-input-area">
+                                <input type="text" id="chatInput" placeholder="Enter query... (e.g., 'show caste bias chart')" autocomplete="off">
+                                <button id="sendBtn" class="send-btn">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-sidebar" id="chartSidebar">
+                        <div class="chart-panel" id="chartPanel" style="display: none;">
+                            <div class="chart-panel-header">
+                                <span id="chartTitle">Chart</span>
+                                <button class="icon-btn" onclick="closeChart()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div class="chart-panel-body">
+                                <canvas id="dynamicChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SEARCH SCREEN -->
+            <section id="search" class="screen">
+                <div class="panel full">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-search"></i> Semantic Case Search</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="searchInput" placeholder="Search complaints (e.g., 'broken water pipe')">
+                            <label class="checkbox">
+                                <input type="checkbox" id="silencedOnly">
+                                <span>Silenced only</span>
+                            </label>
+                            <button class="btn" id="searchBtn">SEARCH</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel full" id="searchResults">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-list"></i> Results</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="empty-state">
+                            <i class="fas fa-search"></i>
+                            <p>Enter a query to search cases</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DEMOGRAPHICS SCREEN -->
+            <section id="demographics" class="screen">
+                <div class="charts-row">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fas fa-venus-mars"></i> Gender</span>
+                        </div>
+                        <div class="panel-body chart-container">
+                            <canvas id="genderChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fas fa-layer-group"></i> Caste</span>
+                        </div>
+                        <div class="panel-body chart-container">
+                            <canvas id="casteChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fas fa-wallet"></i> Income</span>
+                        </div>
+                        <div class="panel-body chart-container">
+                            <canvas id="incomeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel full">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-lightbulb"></i> Key Findings</span>
+                    </div>
+                    <div class="panel-body">
+                        <ul class="findings-list" id="demoFindings"></ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- GEOGRAPHY SCREEN -->
+            <section id="geography" class="screen">
+                <div class="panel full">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-map-marked-alt"></i> Ward-Level Analysis</span>
+                    </div>
+                    <div class="panel-body">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>RANK</th>
+                                    <th>WARD</th>
+                                    <th>AVG SCORE</th>
+                                    <th>CASES</th>
+                                    <th>SILENCED %</th>
+                                    <th>STATUS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="geoTableBody">
+                                <tr><td colspan="6" class="loading">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CATEGORIES SCREEN -->
+            <section id="categories" class="screen">
+                <div class="panel full">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-folder-open"></i> Category Analysis</span>
+                    </div>
+                    <div class="panel-body chart-container-large">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+                <div class="panel full">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-lightbulb"></i> Insights</span>
+                    </div>
+                    <div class="panel-body">
+                        <ul class="findings-list" id="catFindings"></ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TEMPORAL SCREEN -->
+            <section id="temporal" class="screen">
+                <div class="panel full">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-clock"></i> Temporal Decay Analysis</span>
+                    </div>
+                    <div class="panel-body chart-container-large">
+                        <canvas id="temporalChart"></canvas>
+                    </div>
+                </div>
+                <div class="panel full">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-lightbulb"></i> Finding</span>
+                    </div>
+                    <div class="panel-body">
+                        <p class="insight-text" id="temporalInsight">Loading...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- REPORT SCREEN -->
+            <section id="report" class="screen">
+                <div class="panel full">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-file-alt"></i> Autonomous Investigation</span>
+                    </div>
+                    <div class="panel-body center">
+                        <button class="btn large" id="runReportBtn">
+                            <i class="fas fa-rocket"></i>
+                            RUN FULL INVESTIGATION
+                        </button>
+                        <p class="help-text">AI will analyze all bias patterns and generate comprehensive report</p>
+                    </div>
+                </div>
+                <div id="reportStatus" class="panel full" style="display: none;">
+                    <div class="panel-body center">
+                        <div class="spinner"></div>
+                        <p>Investigation in progress...</p>
+                    </div>
+                </div>
+                <div id="reportResults" class="panel full" style="display: none;">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fas fa-file-alt"></i> Investigation Report</span>
+                    </div>
+                    <div class="panel-body">
+                        <pre id="reportContent"></pre>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script src="/static/js/script.js?v=1.0.0"></script>
+</body>
+</html>
