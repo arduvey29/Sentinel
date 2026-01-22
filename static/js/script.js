@@ -1,5 +1,4 @@
 // SENTINEL - Silence Index Investigation System
-// Version 2.0 - Forensic AI Chat
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -17,9 +16,7 @@ let temporalChart = null;
 Chart.defaults.color = '#a0a0b0';
 Chart.defaults.borderColor = '#2a2a3a';
 
-// ============================================================
 // INITIALIZATION
-// ============================================================
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[SENTINEL] Silence Index Investigation System');
@@ -61,10 +58,7 @@ function updateTimestamp() {
     });
     document.getElementById('timestamp').textContent = timestamp;
 }
-
-// ============================================================
 // NAVIGATION
-// ============================================================
 
 function initNavigation() {
     const navItems = document.querySelectorAll('.nav-item');
@@ -134,9 +128,7 @@ function initMobileMenu() {
     });
 }
 
-// ============================================================
 // DASHBOARD
-// ============================================================
 
 async function loadDashboard() {
     try {
@@ -238,9 +230,7 @@ function quickAnalysis(query) {
     }, 300);
 }
 
-// ============================================================
 // CHAT FUNCTIONALITY
-// ============================================================
 
 function initChat() {
     const chatInput = document.getElementById('chatInput');
@@ -457,9 +447,7 @@ function sendSuggestion(query) {
     sendChatMessage(query);
 }
 
-// ============================================================
 // DYNAMIC CHART
-// ============================================================
 
 function renderDynamicChart(chartData) {
     const panel = document.getElementById('chartPanel');
@@ -516,9 +504,7 @@ function closeChart() {
     }
 }
 
-// ============================================================
 // SEARCH
-// ============================================================
 
 function initSearch() {
     const searchBtn = document.getElementById('searchBtn');
@@ -606,9 +592,7 @@ async function performSearch() {
     }
 }
 
-// ============================================================
 // DEMOGRAPHICS
-// ============================================================
 
 async function loadDemographics() {
     try {
@@ -700,9 +684,7 @@ function createDemoChart(canvasId, data, type, chartRef, setChart) {
     setChart(chart);
 }
 
-// ============================================================
 // GEOGRAPHY
-// ============================================================
 
 async function loadGeography() {
     try {
@@ -738,9 +720,7 @@ async function loadGeography() {
     }
 }
 
-// ============================================================
 // CATEGORIES
-// ============================================================
 
 async function loadCategories() {
     try {
@@ -797,9 +777,7 @@ async function loadCategories() {
     }
 }
 
-// ============================================================
 // TEMPORAL
-// ============================================================
 
 async function loadTemporal() {
     try {
@@ -853,9 +831,7 @@ async function loadTemporal() {
     }
 }
 
-// ============================================================
 // REPORT
-// ============================================================
 
 function initReport() {
     const runBtn = document.getElementById('runReportBtn');

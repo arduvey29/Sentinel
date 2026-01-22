@@ -1,4 +1,3 @@
-# add_silence_scores.py
 import pandas as pd
 
 def calculate_silence_score(row):

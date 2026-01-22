@@ -1,4 +1,3 @@
-# index_to_qdrant.py
 import pandas as pd
 import numpy as np
 from qdrant_client import QdrantClient

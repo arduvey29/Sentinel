@@ -1,4 +1,3 @@
-# chat_agent.py - Conversational AI Agent with Qdrant Chat Memory
 import os
 import json
 import uuid

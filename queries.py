@@ -1,4 +1,3 @@
-# queries.py
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, Range
 import pandas as pd

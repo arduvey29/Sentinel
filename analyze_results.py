@@ -1,4 +1,3 @@
-# analyze_results.py
 import json
 from queries import (
     get_silenced_complaints,

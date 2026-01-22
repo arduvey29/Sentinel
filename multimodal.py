@@ -1,4 +1,3 @@
-# multimodal.py - Multimodal Complaint Processing
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
