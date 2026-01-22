@@ -18,7 +18,7 @@ print("=" * 60)
 print(" INITIALIZING AI ANALYSIS SYSTEM")
 print("=" * 60)
 
-# Initialize LLM (lazy loading - will be created when needed)
+# Initialize LLM (lazy loading - will be created when needed.)
 llm = None
 
 def get_llm():
@@ -36,7 +36,7 @@ def get_llm():
 print("* AI system ready (LLM will be loaded on first use)")
 print("* Ready for multi-step analysis")
 
-# ANALYSIS FUNCTIONS
+# ANALYSIS FUNCTIONS.
 
 def analyze_demographics() -> dict:
     """Analyze demographic bias patterns"""
@@ -99,7 +99,7 @@ def get_critical() -> dict:
         ]
     }
 
-# GENERATE COMPREHENSIVE ANALYSIS
+# GENERATE COMPREHENSIVE ANALYSIS.
 
 def generate_bias_report():
     """Generate comprehensive bias report using LLM"""
