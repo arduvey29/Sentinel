@@ -39,9 +39,7 @@ def get_embedding_model():
         _embedding_model = SentenceTransformer('BAAI/bge-small-en-v1.5')
     return _embedding_model
 
-# ============================================================
 # QDRANT CHAT HISTORY MANAGEMENT
-# ============================================================
 
 def init_chat_collection():
     """Initialize Qdrant collection for chat history"""
@@ -180,9 +178,7 @@ def list_sessions(limit: int = 20) -> List[Dict]:
     sessions.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return sessions
 
-# ============================================================
 # DATA QUERY TOOLS
-# ============================================================
 
 from queries import (
     demographic_breakdown,
@@ -332,9 +328,7 @@ def tool_generate_chart(chart_type: str, data_source: str) -> Dict:
     
     return chart
 
-# ============================================================
 # TOOL REGISTRY
-# ============================================================
 
 TOOLS = {
     "get_demographics": {
@@ -371,9 +365,7 @@ TOOLS = {
     }
 }
 
-# ============================================================
 # INTENT DETECTION & TOOL ROUTING
-# ============================================================
 
 def detect_intent(message: str) -> tuple:
     """Detect which tools to call based on message"""
@@ -424,9 +416,7 @@ def detect_intent(message: str) -> tuple:
     
     return tools_needed, chart_request
 
-# ============================================================
 # MAIN CHAT FUNCTION
-# ============================================================
 
 SYSTEM_PROMPT = """You are SENTINEL, an AI forensic analyst for the Silence Index project - a system that exposes institutional bias in civic complaint handling.
 
@@ -514,9 +504,7 @@ Provide analysis based on the data above. Be specific with numbers."""
         "tools_used": tools_needed
     }
 
-# ============================================================
 # TEST
-# ============================================================
 
 if __name__ == "__main__":
     print("Testing Chat Agent...")

@@ -39,6 +39,7 @@ print("=" * 60)
 demographics = demographic_breakdown()
 results['demographics'] = demographics
 
+
 # Calculate disparities
 gender_data = demographics['by_gender']
 if 'F' in gender_data and 'M' in gender_data:
@@ -51,6 +52,7 @@ if 'F' in gender_data and 'M' in gender_data:
     print(f"   Men: {male_avg:.1f} avg silence")
     print(f"   Women are {gender_disparity:.2f}x more likely to be ignored!")
 
+
 # Income disparity
 income_data = demographics['by_income']
 if '0-3L' in income_data and '10L+' in income_data:
@@ -62,6 +64,7 @@ if '0-3L' in income_data and '10L+' in income_data:
     print(f"   Poor (0-3L): {poor_avg:.1f} avg silence")
     print(f"   Rich (10L+): {rich_avg:.1f} avg silence")
     print(f" Poor are {income_disparity:.2f}x more likely to be ignored!")
+
 
 # Caste disparity
 caste_data = demographics['by_caste']
@@ -92,6 +95,7 @@ if len(geography['all_wards']) >= 2:
     print(f"   Most silenced: {worst_ward['ward']} ({worst_ward['avg_silence']:.1f})")
     print(f"   Least silenced: {best_ward['ward']} ({best_ward['avg_silence']:.1f})")
     print(f" {geo_disparity:.2f}x disparity between best and worst wards!")
+    
 
 # QUERY 4: COMPLAINT TYPE ANALYSIS
 print("\n" + "=" * 60)

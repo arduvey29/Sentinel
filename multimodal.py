@@ -9,7 +9,7 @@ import numpy as np
 load_dotenv()
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
-# Lazy loading for models to avoid slow startup
+# Lazy loading for models to avoid slow startup.
 _vision_model = None
 _text_model = None
 _embedding_model = None

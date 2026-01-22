@@ -218,6 +218,7 @@ def search_complaints():
             'error': str(e)
         }), 500
 
+
 # HEALTH CHECK & ROOT
 @app.route('/', methods=['GET'])
 def root():

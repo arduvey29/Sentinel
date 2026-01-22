@@ -68,7 +68,7 @@ for idx, row in tqdm(df.iterrows(), total=len(df), desc="   Preparing"):
 
 print(f"   ✓ Prepared {len(points)} points")
 
-# Upload to Qdrant
+# Upload to Qdrant.
 print("\n5. Uploading to Qdrant...")
 batch_size = 100
 for i in tqdm(range(0, len(points), batch_size), desc="   Uploading"):

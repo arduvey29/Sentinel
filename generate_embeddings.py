@@ -44,7 +44,7 @@ print(f"File size: {os.path.getsize(embeddings_path) / (1024*1024):.2f} MB")
 print(f"Vector dimensions: {embeddings.shape[1]}")
 print(f"Total vectors: {embeddings.shape[0]}")
 
-# Test loading
+# Test loading.
 test_load = np.load(embeddings_path)
 print(f"✓ Test load successful: {test_load.shape}")
 

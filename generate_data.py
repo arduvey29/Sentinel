@@ -8,7 +8,7 @@ import pandas as pd  # for tabular data handling
 # Ensure data directory exists
 os.makedirs("data", exist_ok=True)
 
-# --- Configuration ---
+# Configuration 
 N_COMPLAINTS = 10_000
 
 CATEGORIES = [
@@ -100,6 +100,7 @@ def generate_complaints(n: int) -> pd.DataFrame:
 if __name__ == "__main__":
     df = generate_complaints(N_COMPLAINTS)
     out_path = "data/complaints_raw.csv"
+
     # Quote all fields so commas in text do not break CSV parsing later.
     df.to_csv(out_path, index=False, quoting=csv.QUOTE_ALL)
     print(f"✓ Generated {len(df)} complaints → {out_path}")

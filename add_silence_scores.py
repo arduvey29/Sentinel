@@ -3,7 +3,6 @@ import pandas as pd
 def calculate_silence_score(row):
     """
     Calculate silence score (0-100) based on response status and days in system.
-    
     Logic:
     - NO_RESPONSE: High silence (scales with time, max 100)
     - RESPONDED: Medium silence (responded but not resolved)

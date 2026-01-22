@@ -10,7 +10,7 @@ COLLECTION_NAME = "silence_complaints"
 
 print("* Connected to Qdrant")
 
-# QUERY 1: GET SILENCED COMPLAINT
+# QUERY 1: GET SILENCED COMPLAINT.
 def get_silenced_complaints(threshold=70, limit=100):
     """
     Get complaints with high silence scores.
@@ -47,7 +47,7 @@ def get_silenced_complaints(threshold=70, limit=100):
     
     return silenced[:limit]
 
-# QUERY 2: DEMOGRAPHIC BREAKDOWN
+# QUERY 2: DEMOGRAPHIC BREAKDOWN.
 def demographic_breakdown():
     """
     Calculate average silence score by gender, caste, and income.
@@ -130,7 +130,7 @@ def demographic_breakdown():
     
     return result
 
-# QUERY 3: GEOGRAPHIC BREAKDOWN
+# QUERY 3: GEOGRAPHIC BREAKDOWN.
 def geographic_breakdown(top_n=10):
     """
     Calculate average silence score by ward and district.
@@ -185,7 +185,7 @@ def geographic_breakdown(top_n=10):
         'all_wards': ward_results
     }
 
-# QUERY 4: COMPLAINT TYPE ANALYSIS
+# QUERY 4: COMPLAINT TYPE ANALYSIS.
 def complaint_type_analysis():
     """
     Calculate average silence score by complaint category.
@@ -237,7 +237,7 @@ def complaint_type_analysis():
     
     return results
 
-# QUERY 5: TEMPORAL DECAY ANALYSIS
+# QUERY 5: TEMPORAL DECAY ANALYSIS.
 def temporal_decay_analysis():
     """
     Show how silence score increases with days in system.
@@ -303,7 +303,7 @@ def temporal_decay_analysis():
     
     return results
 
-# QUERY 6: SIMILARITY SEARCH
+# QUERY 6: SIMILARITY SEARCH.
 def similarity_search(query_text, top_k=20, silence_threshold=None):
     """
     Find similar complaints using semantic search.
