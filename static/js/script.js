@@ -301,7 +301,8 @@ async function loadSessions() {
             
             select.innerHTML = '<option value="">New Investigation</option>';
             
-            result.data.sessions.forEach(session => {
+            const sessions = result.data || [];
+            sessions.forEach(session => {
                 const option = document.createElement('option');
                 option.value = session.session_id;
                 option.textContent = session.name || `Session ${session.session_id.slice(0, 8)}`;
@@ -360,7 +361,8 @@ async function loadSessionHistory(sessionId) {
             const messages = document.getElementById('chatMessages');
             messages.innerHTML = '';
             
-            result.data.messages.forEach(msg => {
+            const history = result.data || [];
+            history.forEach(msg => {
                 addMessageToChat(msg.role, msg.content);
             });
             
@@ -404,12 +406,14 @@ async function sendChatMessage(message) {
             })
         });
         
+        console.log('Chat response status:', response.status);
         const result = await response.json();
+        console.log('Chat result:', result);
         
         // Remove typing indicator
         typingDiv.remove();
         
-        if (result.success) {
+        if (result.success && result.data && result.data.response) {
             // Update session if new
             if (result.data.session_id && !currentSession) {
                 currentSession = result.data.session_id;
@@ -419,16 +423,17 @@ async function sendChatMessage(message) {
             // Add assistant message
             addMessageToChat('assistant', result.data.response);
             
-            // Handle chart if present
-            if (result.data.chart_data) {
-                renderDynamicChart(result.data.chart_data);
+            // Handle chart if present (API returns 'chart' not 'chart_data')
+            if (result.data.chart) {
+                renderDynamicChart(result.data.chart);
             }
         } else {
-            addMessageToChat('assistant', `Error: ${result.error}`);
+            addMessageToChat('assistant', `Error: ${result.error || 'Unknown error'}`);
         }
     } catch (error) {
         typingDiv.remove();
         addMessageToChat('assistant', `Connection error: ${error.message}`);
+        console.error('Chat error:', error);
     }
 }
 
@@ -466,28 +471,23 @@ function renderDynamicChart(chartData) {
     const titleEl = document.getElementById('chartTitle');
     const ctx = document.getElementById('dynamicChart');
     
-    if (!panel || !ctx) return;
+    if (!panel || !ctx) {
+        console.error('Chart panel or canvas not found');
+        return;
+    }
+    
+    console.log('Rendering chart:', chartData);
     
     panel.style.display = 'flex';
     titleEl.textContent = chartData.title || 'Analysis Chart';
     
     if (dynamicChart) dynamicChart.destroy();
     
-    const colors = ['#00d4ff', '#ffb700', '#ff6b6b', '#00ff88', '#a855f7', '#ec4899'];
-    
+    // Chart data comes in Chart.js format from backend
+    // with chartData.data.labels and chartData.data.datasets
     dynamicChart = new Chart(ctx, {
         type: chartData.type || 'bar',
-        data: {
-            labels: chartData.labels,
-            datasets: [{
-                label: chartData.label || 'Value',
-                data: chartData.values,
-                backgroundColor: colors.slice(0, chartData.labels.length),
-                borderWidth: 0,
-                borderRadius: chartData.type === 'bar' ? 2 : 0,
-                tension: chartData.type === 'line' ? 0.4 : 0
-            }]
-        },
+        data: chartData.data,
         options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -497,12 +497,15 @@ function renderDynamicChart(chartData) {
             scales: chartData.type !== 'pie' && chartData.type !== 'doughnut' ? {
                 y: {
                     beginAtZero: true,
-                    grid: { color: '#2a2a3a' }
+                    grid: { color: '#2a2a3a' },
+                    ticks: { color: '#a0a0b0' }
                 },
                 x: {
-                    grid: { display: false }
+                    grid: { display: false },
+                    ticks: { color: '#a0a0b0' }
                 }
-            } : undefined
+            } : undefined,
+            ...chartData.options
         }
     });
 }
