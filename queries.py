@@ -1,360 +1,412 @@
-from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, Range
-import pandas as pd
+"""
+Optimized query functions using Qdrant server-side filters.
+Uses shared model instances from models.py. Caches scroll results for 60s.
+"""
+
+import time
 import numpy as np
+from typing import Dict, List, Optional
 from collections import defaultdict
+from qdrant_client.models import Filter, FieldCondition, Range
+from models import qdrant, COMPLAINTS_COLLECTION, get_embedding_model
 
-# Initialize Qdrant client
-client = QdrantClient(host="localhost", port=6333)
-COLLECTION_NAME = "silence_complaints"
+COLLECTION_NAME = COMPLAINTS_COLLECTION
 
-print("* Connected to Qdrant")
+print("* Connected to Qdrant (optimized queries)")
 
-# QUERY 1: GET SILENCED COMPLAINT.
+# ─── Short-lived cache for scroll results ───────────────────────
+_cache = {"points": None, "ts": 0}
+
+def _get_all_points(force=False):
+    """Scroll all points with short-lived cache (60s)."""
+    now = time.time()
+    if not force and _cache["points"] and (now - _cache["ts"]) < 60:
+        return _cache["points"]
+    points = []
+    offset = None
+    while True:
+        result, offset = qdrant.scroll(
+            collection_name=COLLECTION_NAME,
+            limit=1000,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+        points.extend(result)
+        if offset is None:
+            break
+    _cache["points"] = points
+    _cache["ts"] = now
+    return points
+
+def invalidate_cache():
+    _cache["points"] = None
+
+# QUERY 1: GET SILENCED COMPLAINTS
 def get_silenced_complaints(threshold=70, limit=100):
-    """
-    Get complaints with high silence scores.
-    
-    Args:
-        threshold: Minimum silence score (default 70)
-        limit: Max results to return
-    
-    Returns:
-        List of highly silenced complaints
-    """
+    """Get complaints with high silence scores."""
     print(f"\n Query 1: Getting complaints with silence > {threshold}...")
-    
-    # Scroll through all points
-    points, _ = client.scroll(
-        collection_name=COLLECTION_NAME,
-        limit=10000,  # Get all
-        with_payload=True,
-        with_vectors=False
-    )
-    
-    # Filter by silence score
+    points = _get_all_points()
     silenced = [
         p.payload for p in points
-        if p.payload['silence_score'] > threshold
+        if p.payload.get('silence_score', 0) > threshold
     ]
-    
-    # Sort by silence score (highest first)
     silenced.sort(key=lambda x: x['silence_score'], reverse=True)
-    
-    print(f"   ✓ Found {len(silenced)} silenced complaints")
-    print(f"   ✓ Top silence score: {silenced[0]['silence_score']:.1f}")
-    print(f"   ✓ Returning top {min(limit, len(silenced))}")
-    
+    print(f"   Found {len(silenced)} silenced complaints")
     return silenced[:limit]
 
-# QUERY 2: DEMOGRAPHIC BREAKDOWN.
+# QUERY 2: DEMOGRAPHIC BREAKDOWN
 def demographic_breakdown():
-    """
-    Calculate average silence score by gender, caste, and income.
-    
-    Returns:
-        Dictionary with breakdowns by demographic categories
-    """
+    """Average silence score by gender, caste, income."""
     print(f"\n Query 2: Demographic breakdown...")
+    points = _get_all_points()
     
-    # Get all points
-    points, _ = client.scroll(
-        collection_name=COLLECTION_NAME,
-        limit=10000,
-        with_payload=True,
-        with_vectors=False
-    )
-    
-    # Initialize aggregators
     by_gender = defaultdict(lambda: {'scores': [], 'count': 0})
     by_caste = defaultdict(lambda: {'scores': [], 'count': 0})
     by_income = defaultdict(lambda: {'scores': [], 'count': 0})
     
-    # Aggregate
     for point in points:
-        payload = point.payload
-        silence = payload['silence_score']
-        
-        # By gender
-        gender = payload['gender']
-        by_gender[gender]['scores'].append(silence)
-        by_gender[gender]['count'] += 1
-        
-        # By caste
-        caste = payload['caste']
-        by_caste[caste]['scores'].append(silence)
-        by_caste[caste]['count'] += 1
-        
-        # By income
-        income = payload['income_bracket']
-        by_income[income]['scores'].append(silence)
-        by_income[income]['count'] += 1
+        d = point.payload
+        s = d.get('silence_score', 0)
+        by_gender[d.get('gender','?')]['scores'].append(s)
+        by_gender[d.get('gender','?')]['count'] += 1
+        by_caste[d.get('caste','?')]['scores'].append(s)
+        by_caste[d.get('caste','?')]['count'] += 1
+        by_income[d.get('income_bracket','?')]['scores'].append(s)
+        by_income[d.get('income_bracket','?')]['count'] += 1
     
-    # Calculate averages
+    def _summarise(bucket):
+        out = {}
+        for k, v in bucket.items():
+            scores = v['scores']
+            out[k] = {
+                'avg_silence': round(np.mean(scores), 2),
+                'count': v['count'],
+                'silenced_pct': round(sum(1 for sc in scores if sc > 70) / len(scores) * 100, 1),
+            }
+        return out
+    
     result = {
-        'by_gender': {},
-        'by_caste': {},
-        'by_income': {}
+        'by_gender': _summarise(by_gender),
+        'by_caste':  _summarise(by_caste),
+        'by_income': _summarise(by_income),
     }
-    
-    for gender, data in by_gender.items():
-        result['by_gender'][gender] = {
-            'avg_silence': round(np.mean(data['scores']), 2),
-            'count': data['count'],
-            'silenced_pct': round(sum(1 for s in data['scores'] if s > 70) / len(data['scores']) * 100, 1)
-        }
-    
-    for caste, data in by_caste.items():
-        result['by_caste'][caste] = {
-            'avg_silence': round(np.mean(data['scores']), 2),
-            'count': data['count'],
-            'silenced_pct': round(sum(1 for s in data['scores'] if s > 70) / len(data['scores']) * 100, 1)
-        }
-    
-    for income, data in by_income.items():
-        result['by_income'][income] = {
-            'avg_silence': round(np.mean(data['scores']), 2),
-            'count': data['count'],
-            'silenced_pct': round(sum(1 for s in data['scores'] if s > 70) / len(data['scores']) * 100, 1)
-        }
-    
-    # Print summary
-    print(f"   ✓ Analyzed {len(points)} complaints")
-    print(f"\n   Gender Breakdown:")
-    for gender, stats in result['by_gender'].items():
-        print(f"     {gender}: {stats['avg_silence']:.1f} avg ({stats['silenced_pct']:.1f}% silenced)")
-    
-    print(f"\n   Income Breakdown:")
-    for income, stats in sorted(result['by_income'].items()):
-        print(f"     {income}: {stats['avg_silence']:.1f} avg ({stats['silenced_pct']:.1f}% silenced)")
-    
+    print(f"   Analyzed {len(points)} complaints")
     return result
 
-# QUERY 3: GEOGRAPHIC BREAKDOWN.
+# QUERY 3: GEOGRAPHIC BREAKDOWN
 def geographic_breakdown(top_n=10):
-    """
-    Calculate average silence score by ward and district.
-    
-    Returns:
-        Dictionary with top silenced wards
-    """
+    """Average silence by ward."""
     print(f"\n Query 3: Geographic breakdown...")
-    
-    # Get all points
-    points, _ = client.scroll(
-        collection_name=COLLECTION_NAME,
-        limit=10000,
-        with_payload=True,
-        with_vectors=False
-    )
-    
-    # Aggregate by ward
+    points = _get_all_points()
     by_ward = defaultdict(lambda: {'scores': [], 'count': 0})
     
-    for point in points:
-        payload = point.payload
-        ward = payload['ward']
-        silence = payload['silence_score']
-        
-        by_ward[ward]['scores'].append(silence)
+    for p in points:
+        d = p.payload
+        ward = d.get('ward', 'Unknown')
+        by_ward[ward]['scores'].append(d.get('silence_score', 0))
         by_ward[ward]['count'] += 1
     
-    # Calculate averages
     ward_results = []
     for ward, data in by_ward.items():
-        avg_silence = np.mean(data['scores'])
-        silenced_pct = sum(1 for s in data['scores'] if s > 70) / len(data['scores']) * 100
-        
+        scores = data['scores']
         ward_results.append({
             'ward': ward,
-            'avg_silence': round(avg_silence, 2),
+            'avg_silence': round(np.mean(scores), 2),
             'count': data['count'],
-            'silenced_pct': round(silenced_pct, 1)
+            'silenced_pct': round(sum(1 for s in scores if s > 70) / len(scores) * 100, 1),
         })
-    
-    # Sort by avg silence (highest first)
     ward_results.sort(key=lambda x: x['avg_silence'], reverse=True)
-    
-    print(f"   ✓ Analyzed {len(by_ward)} wards")
-    print(f"\n   Top {top_n} Most Silenced Wards:")
-    for i, ward in enumerate(ward_results[:top_n], 1):
-        print(f"     {i}. {ward['ward']}: {ward['avg_silence']:.1f} avg ({ward['silenced_pct']:.1f}% silenced)")
-    
-    return {
-        'top_silenced': ward_results[:top_n],
-        'all_wards': ward_results
-    }
+    print(f"   Analyzed {len(by_ward)} wards")
+    return {'top_silenced': ward_results[:top_n], 'all_wards': ward_results}
 
-# QUERY 4: COMPLAINT TYPE ANALYSIS.
-def complaint_type_analysis():
+# QUERY: CROSS-TABULATION (any two fields)
+def cross_tabulation(field_a: str, field_b: str, metric: str = "avg_silence"):
     """
-    Calculate average silence score by complaint category.
-    
-    Returns:
-        Dictionary with category breakdowns
+    Cross-tabulate any two payload fields and compute a metric.
+    field_a / field_b: payload keys like 'gender', 'caste', 'income_bracket',
+                       'category', 'ward_type', 'response_status', 'ward'
+    metric: 'avg_silence' | 'count' | 'silenced_pct'
+    Returns: {labels_a, labels_b, matrix} where matrix[i][j] = metric value
     """
-    print(f"\n Query 4: Complaint type analysis...")
-    
-    # Get all points
-    points, _ = client.scroll(
-        collection_name=COLLECTION_NAME,
-        limit=10000,
-        with_payload=True,
-        with_vectors=False
-    )
-    
-    # Aggregate by category
-    by_category = defaultdict(lambda: {'scores': [], 'count': 0})
-    
-    for point in points:
-        payload = point.payload
-        category = payload['category']
-        silence = payload['silence_score']
-        
-        by_category[category]['scores'].append(silence)
-        by_category[category]['count'] += 1
-    
-    # Calculate averages
+    print(f"\n Cross-tab: {field_a} × {field_b} ({metric})...")
+    points = _get_all_points()
+
+    buckets = defaultdict(lambda: defaultdict(list))
+    for p in points:
+        d = p.payload
+        a = str(d.get(field_a, '?'))
+        b = str(d.get(field_b, '?'))
+        buckets[a][b].append(d.get('silence_score', 0))
+
+    labels_a = sorted(buckets.keys())
+    labels_b_set = set()
+    for inner in buckets.values():
+        labels_b_set.update(inner.keys())
+    labels_b = sorted(labels_b_set)
+
+    matrix = []
+    for a in labels_a:
+        row = []
+        for b in labels_b:
+            scores = buckets[a][b]
+            if not scores:
+                row.append(0)
+            elif metric == "count":
+                row.append(len(scores))
+            elif metric == "silenced_pct":
+                row.append(round(sum(1 for s in scores if s > 70) / len(scores) * 100, 1))
+            else:  # avg_silence
+                row.append(round(np.mean(scores), 2))
+        matrix.append(row)
+
+    print(f"   {len(labels_a)} x {len(labels_b)} grid")
+    return {"labels_a": labels_a, "labels_b": labels_b, "matrix": matrix, "field_a": field_a, "field_b": field_b, "metric": metric}
+
+# QUERY: SINGLE-FIELD BREAKDOWN (generic)
+def field_breakdown(field: str, metric: str = "avg_silence", top_n: int = 0):
+    """
+    Generic breakdown by a single payload field.
+    Returns list of {label, avg_silence, count, silenced_pct} sorted by metric desc.
+    """
+    points = _get_all_points()
+    buckets = defaultdict(list)
+    for p in points:
+        buckets[str(p.payload.get(field, '?'))].append(p.payload.get('silence_score', 0))
+
     results = []
-    for category, data in by_category.items():
-        avg_silence = np.mean(data['scores'])
-        silenced_pct = sum(1 for s in data['scores'] if s > 70) / len(data['scores']) * 100
-        
+    for label, scores in buckets.items():
         results.append({
-            'category': category,
-            'avg_silence': round(avg_silence, 2),
-            'count': data['count'],
-            'silenced_pct': round(silenced_pct, 1)
+            'label': label,
+            'avg_silence': round(np.mean(scores), 2),
+            'count': len(scores),
+            'silenced_pct': round(sum(1 for s in scores if s > 70) / len(scores) * 100, 1),
         })
-    
-    # Sort by silenced percentage (highest first)
-    results.sort(key=lambda x: x['silenced_pct'], reverse=True)
-    
-    print(f"   ✓ Analyzed {len(by_category)} categories")
-    print(f"\n   Categories by Silence Rate:")
-    for cat in results:
-        print(f"     {cat['category']}: {cat['silenced_pct']:.1f}% silenced (avg: {cat['avg_silence']:.1f})")
-    
+
+    sort_key = metric if metric in ('avg_silence', 'count', 'silenced_pct') else 'avg_silence'
+    results.sort(key=lambda x: x[sort_key], reverse=True)
+    if top_n > 0:
+        results = results[:top_n]
     return results
 
-# QUERY 5: TEMPORAL DECAY ANALYSIS.
+
+# QUERY: FILTERED BREAKDOWN (filter by conditions, then breakdown/cross-tab)
+def filtered_breakdown(breakdown_field: str, filters: Dict = None,
+                       cross_field: str = None, metric: str = "avg_silence"):
+    """
+    Filter complaints by conditions, then breakdown by field (optionally cross-tab).
+    
+    filters: dict of {field_name: value_or_list}
+        e.g. {"category": "Water Supply", "ward": ["Ward 5", "Ward 45"]}
+        Values can be a single string or a list of acceptable values.
+    breakdown_field: the field to group by after filtering
+    cross_field: optional second field for cross-tabulation
+    metric: 'avg_silence' | 'count' | 'silenced_pct'
+    
+    Returns: {filter_summary, total_filtered, breakdown: [...]} 
+             or cross-tab structure if cross_field given.
+    """
+    print(f"\n Filtered breakdown: {breakdown_field} (filters={filters}, cross={cross_field})...")
+    points = _get_all_points()
+    
+    # Apply filters
+    filtered = []
+    for p in points:
+        d = p.payload
+        match = True
+        if filters:
+            for fk, fv in filters.items():
+                val = str(d.get(fk, '?'))
+                if isinstance(fv, list):
+                    if val not in [str(v) for v in fv]:
+                        match = False
+                        break
+                else:
+                    if val != str(fv):
+                        match = False
+                        break
+        if match:
+            filtered.append(d)
+    
+    print(f"   {len(filtered)} complaints after filtering")
+    
+    if not filtered:
+        return {"filter_summary": filters, "total_filtered": 0, "breakdown": []}
+    
+    def _calc_metric(scores):
+        if not scores:
+            return 0
+        if metric == "count":
+            return len(scores)
+        elif metric == "silenced_pct":
+            return round(sum(1 for s in scores if s > 70) / len(scores) * 100, 1)
+        else:
+            return round(float(np.mean(scores)), 2)
+    
+    # Cross-tabulation on filtered data
+    if cross_field:
+        buckets = defaultdict(lambda: defaultdict(list))
+        for d in filtered:
+            a = str(d.get(breakdown_field, '?'))
+            b = str(d.get(cross_field, '?'))
+            buckets[a][b].append(d.get('silence_score', 0))
+        
+        labels_a = sorted(buckets.keys())
+        labels_b_set = set()
+        for inner in buckets.values():
+            labels_b_set.update(inner.keys())
+        labels_b = sorted(labels_b_set)
+        
+        rows = []
+        for a in labels_a:
+            row = {"label": a}
+            for b in labels_b:
+                scores = buckets[a][b]
+                row[b] = {
+                    "value": _calc_metric(scores),
+                    "count": len(scores),
+                    "avg_silence": round(float(np.mean(scores)), 2) if scores else 0,
+                    "silenced_pct": round(sum(1 for s in scores if s > 70) / len(scores) * 100, 1) if scores else 0,
+                }
+            rows.append(row)
+        
+        return {
+            "filter_summary": filters,
+            "total_filtered": len(filtered),
+            "breakdown_field": breakdown_field,
+            "cross_field": cross_field,
+            "metric": metric,
+            "labels_a": labels_a,
+            "labels_b": labels_b,
+            "rows": rows,
+        }
+    
+    # Simple breakdown on filtered data
+    buckets = defaultdict(list)
+    for d in filtered:
+        buckets[str(d.get(breakdown_field, '?'))].append(d.get('silence_score', 0))
+    
+    results = []
+    for label, scores in buckets.items():
+        results.append({
+            'label': label,
+            'avg_silence': round(float(np.mean(scores)), 2),
+            'count': len(scores),
+            'silenced_pct': round(sum(1 for s in scores if s > 70) / len(scores) * 100, 1),
+        })
+    results.sort(key=lambda x: x.get(metric, x.get('avg_silence', 0)), reverse=True)
+    
+    return {
+        "filter_summary": filters,
+        "total_filtered": len(filtered),
+        "breakdown_field": breakdown_field,
+        "metric": metric,
+        "breakdown": results,
+    }
+
+# QUERY 4: COMPLAINT TYPE ANALYSIS
+def complaint_type_analysis():
+    """Average silence by complaint category."""
+    print(f"\n Query 4: Complaint type analysis...")
+    points = _get_all_points()
+    by_cat = defaultdict(lambda: {'scores': [], 'count': 0})
+    
+    for p in points:
+        d = p.payload
+        cat = d.get('category', 'Other')
+        by_cat[cat]['scores'].append(d.get('silence_score', 0))
+        by_cat[cat]['count'] += 1
+    
+    results = []
+    for cat, data in by_cat.items():
+        scores = data['scores']
+        results.append({
+            'category': cat,
+            'avg_silence': round(np.mean(scores), 2),
+            'count': data['count'],
+            'silenced_pct': round(sum(1 for s in scores if s > 70) / len(scores) * 100, 1),
+        })
+    results.sort(key=lambda x: x['silenced_pct'], reverse=True)
+    print(f"   Analyzed {len(by_cat)} categories")
+    return results
+
+# QUERY 5: TEMPORAL DECAY ANALYSIS
 def temporal_decay_analysis():
-    """
-    Show how silence score increases with days in system.
-    
-    Returns:
-        Dictionary with time buckets and avg silence scores
-    """
+    """Silence growth over time buckets."""
     print(f"\n Query 5: Temporal decay analysis...")
+    points = _get_all_points()
     
-    # Get all points
-    points, _ = client.scroll(
-        collection_name=COLLECTION_NAME,
-        limit=10000,
-        with_payload=True,
-        with_vectors=False
-    )
-    
-    # Define time buckets (in days)
     buckets = [
-        (0, 30, "0-30 days"),
-        (30, 60, "30-60 days"),
-        (60, 90, "60-90 days"),
-        (90, 120, "90-120 days"),
-        (120, 180, "120-180 days"),
-        (180, 240, "180-240 days"),
-        (240, 300, "240-300 days"),
-        (300, 365, "300-365 days")
+        (0, 30, "0-30 days"), (30, 60, "30-60 days"),
+        (60, 90, "60-90 days"), (90, 120, "90-120 days"),
+        (120, 180, "120-180 days"), (180, 240, "180-240 days"),
+        (240, 300, "240-300 days"), (300, 365, "300-365 days"),
     ]
-    
     bucket_data = {label: {'scores': [], 'count': 0} for _, _, label in buckets}
     
-    # Aggregate by time bucket
-    for point in points:
-        payload = point.payload
-        days = payload['days_in_system']
-        silence = payload['silence_score']
-        
-        for min_days, max_days, label in buckets:
-            if min_days <= days < max_days:
+    for p in points:
+        d = p.payload
+        days = d.get('days_in_system', 0)
+        silence = d.get('silence_score', 0)
+        for lo, hi, label in buckets:
+            if lo <= days < hi:
                 bucket_data[label]['scores'].append(silence)
                 bucket_data[label]['count'] += 1
                 break
     
-    # Calculate averages
     results = []
     for _, _, label in buckets:
         data = bucket_data[label]
         if data['count'] > 0:
-            avg_silence = np.mean(data['scores'])
-            silenced_pct = sum(1 for s in data['scores'] if s > 70) / len(data['scores']) * 100
-            
+            scores = data['scores']
             results.append({
                 'time_bucket': label,
-                'avg_silence': round(avg_silence, 2),
+                'avg_silence': round(np.mean(scores), 2),
                 'count': data['count'],
-                'silenced_pct': round(silenced_pct, 1)
+                'silenced_pct': round(sum(1 for s in scores if s > 70) / len(scores) * 100, 1),
             })
-    
-    print(f"   ✓ Temporal analysis complete")
-    print(f"\n   Silence Growth Over Time:")
-    for bucket in results:
-        print(f"     {bucket['time_bucket']}: {bucket['avg_silence']:.1f} avg ({bucket['silenced_pct']:.1f}% silenced)")
-    
+    print(f"   Temporal analysis complete")
     return results
 
-# QUERY 6: SIMILARITY SEARCH.
+# QUERY 6: SIMILARITY SEARCH (uses Qdrant vector search + server-side filter)
 def similarity_search(query_text, top_k=20, silence_threshold=None):
-    """
-    Find similar complaints using semantic search.
-    
-    Args:
-        query_text: Text to search for
-        top_k: Number of results
-        silence_threshold: Optional filter for silence score
-    
-    Returns:
-        List of similar complaints
-    """
+    """Semantic search using shared embedding model & Qdrant server-side filter."""
     print(f"\n Query 6: Similarity search for '{query_text}'...")
     
-    # Generate embedding for query
-    from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer('BAAI/bge-small-en-v1.5')
+    model = get_embedding_model()
     query_vector = model.encode(query_text).tolist()
     
-    # Search in Qdrant
-    search_result = client.query_points(
+    search_filter = None
+    if silence_threshold:
+        search_filter = Filter(
+            must=[FieldCondition(key="silence_score", range=Range(gt=silence_threshold))]
+        )
+    
+    search_result = qdrant.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
+        query_filter=search_filter,
         limit=top_k,
-        with_payload=True
+        with_payload=True,
     )
-    results = search_result.points
     
-    # Filter by silence threshold if provided
-    if silence_threshold:
-        results = [r for r in results if r.payload['silence_score'] > silence_threshold]
-    
-    # Format results
     formatted = []
-    for r in results:
+    for r in search_result.points:
         formatted.append({
-            'text': r.payload['text'],
-            'silence_score': r.payload['silence_score'],
-            'category': r.payload['category'],
-            'gender': r.payload['gender'],
-            'caste': r.payload['caste'],
-            'income': r.payload['income_bracket'],
-            'ward': r.payload['ward'],
-            'similarity': round(r.score, 3)
+            'text': r.payload.get('text', ''),
+            'silence_score': r.payload.get('silence_score', 0),
+            'category': r.payload.get('category', ''),
+            'gender': r.payload.get('gender', ''),
+            'caste': r.payload.get('caste', ''),
+            'income': r.payload.get('income_bracket', ''),
+            'ward': r.payload.get('ward', ''),
+            'ward_type': r.payload.get('ward_type', ''),
+            'days_in_system': r.payload.get('days_in_system', 0),
+            'response_status': r.payload.get('response_status', ''),
+            'similarity': round(r.score, 3),
         })
     
-    print(f"   ✓ Found {len(formatted)} similar complaints")
-    if formatted:
-        silenced_count = sum(1 for r in formatted if r['silence_score'] > 70)
-        print(f"   ✓ {silenced_count} ({silenced_count/len(formatted)*100:.1f}%) are silenced (>70)")
-    
+    print(f"   Found {len(formatted)} results")
     return formatted
 
 # MAIN TEST

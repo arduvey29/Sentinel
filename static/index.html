@@ -241,7 +241,20 @@
                             </div>
 
                             <div class="chat-input-area">
-                                <input type="text" id="chatInput" placeholder="Enter query... (e.g., 'show caste bias chart')" autocomplete="off">
+                                <label class="image-upload-btn" title="Attach image complaint">
+                                    <i class="fas fa-camera"></i>
+                                    <input type="file" id="imageUpload" accept="image/*" style="display:none">
+                                </label>
+                                <div class="input-wrapper">
+                                    <div id="imagePreviewBar" class="image-preview-bar" style="display:none">
+                                        <img id="imagePreviewThumb" class="preview-thumb" alt="preview">
+                                        <span id="imageFileName" class="image-file-name"></span>
+                                        <button class="remove-image-btn" onclick="clearImageAttachment()">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                    <input type="text" id="chatInput" placeholder="Enter query... (e.g., 'show caste bias chart')" autocomplete="off">
+                                </div>
                                 <button id="sendBtn" class="send-btn">
                                     <i class="fas fa-paper-plane"></i>
                                 </button>
@@ -425,7 +438,7 @@
                         <span class="panel-title"><i class="fas fa-file-alt"></i> Investigation Report</span>
                     </div>
                     <div class="panel-body">
-                        <pre id="reportContent"></pre>
+                        <div id="reportContent" class="report-markdown"></div>
                     </div>
                 </div>
             </section>

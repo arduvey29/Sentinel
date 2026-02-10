@@ -11,6 +11,7 @@ let casteChart = null;
 let incomeChart = null;
 let categoryChart = null;
 let temporalChart = null;
+let pendingImage = null;  // { base64, name }
 
 // Chart.js defaults for dark theme
 Chart.defaults.color = '#a0a0b0';
@@ -239,17 +240,17 @@ function initChat() {
     const clearChatBtn = document.getElementById('clearChatBtn');
     const sessionSelect = document.getElementById('sessionSelect');
     
-    // Send message
+    // Send message (text, image, or both)
     sendBtn?.addEventListener('click', () => {
-        const msg = chatInput?.value.trim();
-        if (msg) sendChatMessage(msg);
+        const msg = chatInput?.value.trim() || '';
+        if (msg || pendingImage) sendChatMessage(msg);
     });
     
     chatInput?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            const msg = chatInput.value.trim();
-            if (msg) sendChatMessage(msg);
+            const msg = chatInput.value.trim() || '';
+            if (msg || pendingImage) sendChatMessage(msg);
         }
     });
     
@@ -277,6 +278,29 @@ function initChat() {
         } else {
             currentSession = null;
         }
+    });
+
+    // Image upload handler
+    const imageUpload = document.getElementById('imageUpload');
+    imageUpload?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result.split(',')[1]; // strip data:image/...;base64,
+            pendingImage = { base64, name: file.name };
+            
+            // Show preview bar
+            const previewBar = document.getElementById('imagePreviewBar');
+            const thumb = document.getElementById('imagePreviewThumb');
+            const fileName = document.getElementById('imageFileName');
+            
+            thumb.src = reader.result;
+            fileName.textContent = file.name;
+            previewBar.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
     });
 }
 
@@ -370,8 +394,21 @@ async function sendChatMessage(message) {
     // Clear input
     if (chatInput) chatInput.value = '';
     
-    // Add user message
-    addMessageToChat('user', message);
+    // Check for attached image
+    const hasImage = pendingImage !== null;
+    const imageData = pendingImage;
+    
+    // Add user message (with image preview if attached)
+    let userHtml = message || '';
+    if (hasImage) {
+        userHtml = `${message ? message + '<br>' : ''}<img src="data:image/jpeg;base64,${imageData.base64.substring(0,100)}..." class="chat-image-preview" alt="attached"><br><small>${imageData.name}</small>`;
+        // Actually show full image
+        userHtml = `${message ? message + '<br>' : ''}<img src="data:image/jpeg;base64,${imageData.base64}" class="chat-image-preview" alt="attached"><br><small>📷 ${imageData.name}</small>`;
+    }
+    addMessageToChat('user', userHtml, true);
+    
+    // Clear image attachment
+    clearImageAttachment();
     
     // Add typing indicator
     const typingDiv = document.createElement('div');
@@ -387,33 +424,63 @@ async function sendChatMessage(message) {
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
     
     try {
-        const response = await fetch(`${API_BASE}/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: message,
-                session_id: currentSession
-            })
-        });
+        let result;
         
-        console.log('Chat response status:', response.status);
-        const result = await response.json();
-        console.log('Chat result:', result);
+        if (hasImage) {
+            // Send to multimodal endpoint first
+            const mmResponse = await fetch(`${API_BASE}/multimodal/process`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: message || 'Analyze this image complaint',
+                    image: imageData.base64
+                })
+            });
+            const mmResult = await mmResponse.json();
+            
+            // Now send to chat with multimodal context
+            const chatMsg = message
+                ? `[Image complaint uploaded: ${mmResult.data?.final_description || imageData.name}] ${message}`
+                : `Analyze this image complaint: ${mmResult.data?.final_description || 'Image uploaded'}. Category: ${mmResult.data?.category || 'Unknown'}, Severity: ${mmResult.data?.severity || 'Unknown'}`;
+            
+            const chatResponse = await fetch(`${API_BASE}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: chatMsg,
+                    session_id: currentSession
+                })
+            });
+            result = await chatResponse.json();
+            
+            // Add multimodal badge
+            if (result.success && result.data) {
+                result.data.response = `🔍 **Image Analysis:** ${mmResult.data?.category || 'Unknown'} | Severity: ${mmResult.data?.severity || 'Unknown'} | Indexed: ${mmResult.data?.indexed ? 'Yes' : 'No'}\n\n${result.data.response}`;
+            }
+        } else {
+            // Regular text chat
+            const response = await fetch(`${API_BASE}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: message,
+                    session_id: currentSession
+                })
+            });
+            result = await response.json();
+        }
         
         // Remove typing indicator
         typingDiv.remove();
         
         if (result.success && result.data && result.data.response) {
-            // Update session if new
             if (result.data.session_id && !currentSession) {
                 currentSession = result.data.session_id;
                 await loadSessions();
             }
             
-            // Add assistant message
             addMessageToChat('assistant', result.data.response);
             
-            // Handle chart if present (API returns 'chart' not 'chart_data')
             if (result.data.chart) {
                 renderDynamicChart(result.data.chart);
             }
@@ -427,15 +494,22 @@ async function sendChatMessage(message) {
     }
 }
 
-function addMessageToChat(role, content) {
+function clearImageAttachment() {
+    pendingImage = null;
+    const previewBar = document.getElementById('imagePreviewBar');
+    const upload = document.getElementById('imageUpload');
+    if (previewBar) previewBar.style.display = 'none';
+    if (upload) upload.value = '';
+}
+
+function addMessageToChat(role, content, isRawHtml = false) {
     const messagesDiv = document.getElementById('chatMessages');
     
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
     
-    // Parse markdown if available
     let html = content;
-    if (typeof marked !== 'undefined') {
+    if (!isRawHtml && typeof marked !== 'undefined') {
         try {
             html = marked.parse(content);
         } catch (e) {
@@ -471,30 +545,83 @@ function renderDynamicChart(chartData) {
     
     if (dynamicChart) dynamicChart.destroy();
     
-    // Chart data comes in Chart.js format from backend
-    // with chartData.data.labels and chartData.data.datasets
-    dynamicChart = new Chart(ctx, {
-        type: chartData.type || 'bar',
-        data: chartData.data,
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false }
+    const type = chartData.type || 'bar';
+    const isCircular = ['pie', 'doughnut', 'polarArea'].includes(type);
+    const isRadar = type === 'radar';
+    const hasMultiDataset = chartData.options?._multiDataset || 
+                            (chartData.data?.datasets?.length > 1);
+    
+    // Build options
+    const opts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { 
+                display: hasMultiDataset || isCircular,
+                position: isCircular ? 'right' : 'top',
+                labels: { color: '#a0a0b0', padding: 12, font: { size: 11 } }
             },
-            scales: chartData.type !== 'pie' && chartData.type !== 'doughnut' ? {
-                y: {
-                    beginAtZero: true,
-                    grid: { color: '#2a2a3a' },
-                    ticks: { color: '#a0a0b0' }
-                },
-                x: {
-                    grid: { display: false },
-                    ticks: { color: '#a0a0b0' }
-                }
-            } : undefined,
-            ...chartData.options
+            tooltip: {
+                backgroundColor: '#1a1a24',
+                titleColor: '#00d4ff',
+                bodyColor: '#ffffff',
+                borderColor: '#2a2a3a',
+                borderWidth: 1,
+            }
         }
+    };
+    
+    // Scales only for cartesian types
+    if (!isCircular && !isRadar) {
+        const isHorizontal = chartData.options?.indexAxis === 'y';
+        opts.scales = {
+            x: {
+                stacked: chartData.options?.scales?.x?.stacked || false,
+                grid: { color: isHorizontal ? '#2a2a3a' : 'transparent' },
+                ticks: { color: '#a0a0b0', maxRotation: 45 },
+                beginAtZero: isHorizontal,
+            },
+            y: {
+                stacked: chartData.options?.scales?.y?.stacked || false,
+                grid: { color: isHorizontal ? 'transparent' : '#2a2a3a' },
+                ticks: { color: '#a0a0b0' },
+                beginAtZero: true,
+            }
+        };
+        if (isHorizontal) opts.indexAxis = 'y';
+    }
+    
+    // Radar scales
+    if (isRadar) {
+        opts.scales = {
+            r: {
+                angleLines: { color: '#2a2a3a' },
+                grid: { color: '#2a2a3a' },
+                pointLabels: { color: '#a0a0b0', font: { size: 11 } },
+                ticks: { color: '#a0a0b0', backdropColor: 'transparent' },
+                beginAtZero: true,
+            }
+        };
+        // Make radar datasets translucent fills
+        chartData.data.datasets.forEach((ds, i) => {
+            const colors = ['#00d4ff','#ff6b6b','#ffb700','#00ff88','#a855f7','#f97316','#ec4899','#14b8a6'];
+            ds.borderColor = ds.borderColor || colors[i % colors.length];
+            ds.backgroundColor = ds.backgroundColor || (ds.borderColor + '33');
+            ds.pointBackgroundColor = ds.borderColor;
+            ds.fill = true;
+        });
+    }
+    
+    // Clean up internal flags from options before spreading
+    const extraOpts = { ...(chartData.options || {}) };
+    delete extraOpts._multiDataset;
+    delete extraOpts.scales;
+    delete extraOpts.indexAxis;
+    
+    dynamicChart = new Chart(ctx, {
+        type: type,
+        data: chartData.data,
+        options: { ...opts, ...extraOpts }
     });
 }
 
@@ -863,7 +990,34 @@ async function runFullReport() {
         
         if (result.success) {
             resultsPanel.style.display = 'block';
-            document.getElementById('reportContent').textContent = result.data.report;
+            const reportDiv = document.getElementById('reportContent');
+            
+            // Show investigation steps first
+            let stepsHtml = '';
+            if (result.data.steps && result.data.steps.length > 0) {
+                stepsHtml = '<div class="investigation-steps"><h4>🔍 Investigation Trail</h4><ul>';
+                result.data.steps.forEach(step => {
+                    const icon = {
+                        'START': '🚀', 'THINK': '🤔', 'THOUGHT': '💭',
+                        'ACTION': '⚡', 'OBSERVATION': '📊', 'DECIDE': '✅',
+                        'SYNTHESIZE': '📝', 'COMPLETE': '🏁', 'ERROR': '❌'
+                    }[step.type] || '▶';
+                    stepsHtml += `<li><span class="step-icon">${icon}</span> <strong>${step.type}:</strong> ${step.message}</li>`;
+                });
+                stepsHtml += '</ul></div><hr>';
+            }
+            
+            // Render report as markdown
+            let reportHtml = result.data.report;
+            if (typeof marked !== 'undefined') {
+                try {
+                    reportHtml = marked.parse(result.data.report);
+                } catch (e) {
+                    reportHtml = `<pre>${result.data.report}</pre>`;
+                }
+            }
+            
+            reportDiv.innerHTML = stepsHtml + reportHtml;
         } else {
             alert('Error: ' + result.error);
         }

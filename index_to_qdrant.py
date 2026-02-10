@@ -61,7 +61,10 @@ for idx, row in tqdm(df.iterrows(), total=len(df), desc="   Preparing"):
             "caste": row['caste'],
             "income_bracket": row['income_bracket'],
             "ward": row['ward'],
-            "district": row['district']
+            "ward_type": row['ward_type'],
+            "district": row['district'],
+            "privilege_score": int(row['privilege_score']),
+            "admin_remarks": str(row['admin_remarks']) if row['admin_remarks'] else "",
         }
     )
     points.append(point)

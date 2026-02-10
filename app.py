@@ -11,9 +11,7 @@ from queries import (
     temporal_decay_analysis,
     similarity_search
 )
-# Lazy imports to avoid slow startup - imported inside functions
-# from agentic_ai import generate_bias_report
-# from multimodal import process_image_complaint, process_complaint_batch
+from models import get_total_complaints
 
 # Initialize Flask app with static folder
 app = Flask(__name__, static_folder='static', static_url_path='/static')
@@ -51,8 +49,8 @@ def get_stats():
             avg_silence = 0
             avg_days = 0
         
-        # Total complaints (hardcoded as we know it's 10,000)
-        total_complaints = 10000
+        # Dynamic count from Qdrant
+        total_complaints = get_total_complaints()
         silence_rate = (total_silenced / total_complaints) * 100
         
         return jsonify({
@@ -219,14 +217,15 @@ def search_complaints():
         }), 500
 
 
-# HEALTH CHECK & ROOT
-@app.route('/', methods=['GET'])
-def root():
-    """Root endpoint - API info"""
+# HEALTH CHECK & API INFO
+@app.route('/api/info', methods=['GET'])
+def api_info():
+    """API info endpoint"""
     return jsonify({
         'name': 'Silence Index API',
-        'version': '1.0',
+        'version': '2.0',
         'status': 'running',
+        'total_complaints': get_total_complaints(),
         'endpoints': [
             'GET  /api/stats',
             'GET  /api/demographic-silence',
@@ -234,6 +233,7 @@ def root():
             'GET  /api/complaint-types',
             'GET  /api/temporal-decay',
             'POST /api/search',
+            'POST /api/chat',
             'POST /api/agent/investigate',
             'POST /api/multimodal/process'
         ]
@@ -251,21 +251,29 @@ def health():
 @app.route('/api/agent/investigate', methods=['POST'])
 def agent_investigate():
     """
-    Trigger autonomous AI investigation.
-    Agent will analyze all bias patterns and generate report.
+    Trigger autonomous AI investigation using ReAct reasoning.
+    Agent will gather data in phases, reason iteratively, and produce markdown report.
     """
     try:
         from agentic_ai import generate_bias_report
-        report = generate_bias_report()
+
+        steps = []
+        def on_step(step_type, msg):
+            steps.append({"type": step_type, "message": msg})
+
+        report = generate_bias_report(stream_callback=on_step)
         
         return jsonify({
             'success': True,
             'data': {
                 'report': report,
-                'report_file': 'AI_BIAS_REPORT.txt'
+                'steps': steps,
+                'format': 'markdown',
             }
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
@@ -419,37 +427,34 @@ def search_history():
 def process_multimodal_complaint():
     """
     Process multimodal complaint (text + optional image).
+    Image complaints are automatically indexed into Qdrant.
     
     Request:
         - text: Complaint text
         - image: Base64 encoded image (optional)
     """
     try:
-        # Lazy import to avoid slow startup
-        from multimodal import process_image_complaint
+        from multimodal import process_base64_image, process_image_complaint
+        from models import get_embedding_model
         
         data = request.get_json()
-        text = data.get('text')
+        text = data.get('text', '')
         image_b64 = data.get('image')
         
         if image_b64:
-            # Save temp image
-            import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as f:
-                f.write(base64.b64decode(image_b64))
-                temp_path = f.name
-            
-            result = process_image_complaint(temp_path, text)
-            os.unlink(temp_path)  # Clean up
+            # Process image + optional text (indexes into Qdrant automatically)
+            result = process_base64_image(image_b64, text or None)
         else:
-            # Text only
-            from multimodal import get_embedding_model
+            # Text-only complaint
+            if not text:
+                return jsonify({'success': False, 'error': 'No text or image provided'}), 400
             embedding_model = get_embedding_model()
             embedding = embedding_model.encode(text)
             result = {
-                'text': text,
-                'embedding': embedding.tolist(),
-                'modality': 'text-only'
+                'final_description': text,
+                'modality': 'text-only',
+                'embedding_dims': len(embedding),
+                'indexed': False,
             }
         
         return jsonify({
@@ -457,6 +462,8 @@ def process_multimodal_complaint():
             'data': result
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
@@ -482,9 +489,10 @@ def internal_error(e):
 if __name__ == '__main__':
     print("\n[OK] Flask app initialized")
     print("[OK] CORS enabled")
-    print("[OK] 13 API endpoints registered")
+    print("[OK] Shared models via models.py")
+    print("[OK] Dynamic complaint count from Qdrant")
     print("\n" + "=" * 60)
-    print(" SENTINEL - Silence Index API Server")
+    print(" SENTINEL v2.0 — Silence Index API Server")
     print("=" * 60)
     print("\nAnalytics Endpoints:")
     print("  GET  /api/stats")

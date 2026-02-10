@@ -5,6 +5,7 @@ def calculate_silence_score(row):
     Calculate silence score (0-100) based on response status and days in system.
     Logic:
     - NO_RESPONSE: High silence (scales with time, max 100)
+    - REJECTED: Very high silence (complaint was actively dismissed)
     - RESPONDED: Medium silence (responded but not resolved)
     - RESOLVED: Low silence (inverse of resolution speed)
     """
@@ -13,12 +14,15 @@ def calculate_silence_score(row):
     
     if status == "NO_RESPONSE":
         # Never responded = maximum silence
-        # Scales from 0 to 100 over 365 days
         return 100 * min(days, 365) / 365
+    
+    elif status == "REJECTED":
+        # Actively dismissed = even worse than silence
+        # Starts at 70, scales to 100
+        return 70 + 30 * min(days, 365) / 365
     
     elif status == "RESPONDED":
         # Responded but unresolved = moderate silence
-        # Caps at 60% of max silence
         return 60 * min(days, 365) / 365
     
     else:  # RESOLVED

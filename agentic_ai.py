@@ -1,7 +1,12 @@
+"""
+SENTINEL Agentic AI — Multi-step ReAct reasoning with streaming.
+Uses shared models. Gathers data in phases, reasons iteratively, produces report.
+"""
+
 import os
 import json
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from models import get_llm, get_total_complaints
 
 from queries import (
     demographic_breakdown,
@@ -11,181 +16,205 @@ from queries import (
     get_silenced_complaints
 )
 
-# Load environment variables
 load_dotenv()
 
 print("=" * 60)
-print(" INITIALIZING AI ANALYSIS SYSTEM")
+print(" INITIALIZING AGENTIC AI SYSTEM")
 print("=" * 60)
+print("* AI system ready (ReAct reasoning engine)")
 
-# Initialize LLM (lazy loading - will be created when needed.)
-llm = None
+# ─── Tool registry for the agent ───────────────────────────────
 
-def get_llm():
-    """Lazy load the LLM"""
-    global llm
-    if llm is None:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=os.getenv('GEMINI_API_KEY'),
-            temperature=0.3
-        )
-        print("* Connected to Gemini 2.5 Flash")
-    return llm
+AGENT_TOOLS = {
+    "demographics": {
+        "fn": lambda: demographic_breakdown(),
+        "desc": "Get silence breakdown by gender, caste, income",
+    },
+    "geography": {
+        "fn": lambda: geographic_breakdown(top_n=10),
+        "desc": "Get top-10 silenced wards and geographic patterns",
+    },
+    "categories": {
+        "fn": lambda: complaint_type_analysis(),
+        "desc": "Get silence by complaint category",
+    },
+    "temporal": {
+        "fn": lambda: temporal_decay_analysis(),
+        "desc": "Get temporal decay of complaint handling",
+    },
+    "critical": {
+        "fn": lambda: get_silenced_complaints(threshold=80, limit=10),
+        "desc": "Get most critically silenced complaints",
+    },
+}
 
-print("* AI system ready (LLM will be loaded on first use)")
-print("* Ready for multi-step analysis")
 
-# ANALYSIS FUNCTIONS.
+# ─── ReAct step: single reasoning iteration ────────────────────
 
-def analyze_demographics() -> dict:
-    """Analyze demographic bias patterns"""
-    print("\n   [Tool] Analyzing demographics...")
-    data = demographic_breakdown()
+def _react_step(llm, gathered_data: dict, step_num: int, previous_thoughts: list) -> dict:
+    """One ReAct iteration: THOUGHT → ACTION → OBSERVATION."""
+    tools_available = [t for t in AGENT_TOOLS if t not in gathered_data]
+
+    prompt = f"""You are a forensic data analyst investigating institutional bias.
+
+STEP {step_num} of a multi-step investigation.
+
+DATA GATHERED SO FAR:
+{json.dumps(list(gathered_data.keys()))}
+
+TOOLS STILL AVAILABLE:
+{json.dumps({t: AGENT_TOOLS[t]['desc'] for t in tools_available})}
+
+PREVIOUS THOUGHTS:
+{chr(10).join(previous_thoughts) if previous_thoughts else 'None yet.'}
+
+INSTRUCTIONS:
+1. Think about what data you still need.
+2. Pick ONE tool to call next, OR say "DONE" if you have enough data.
+3. Respond in this EXACT JSON format:
+{{"thought": "your reasoning", "action": "tool_name_or_DONE"}}
+"""
+    response = llm.invoke(prompt)
+    text = response.content.strip()
+
+    try:
+        start = text.index("{")
+        end = text.rindex("}") + 1
+        parsed = json.loads(text[start:end])
+    except (ValueError, json.JSONDecodeError):
+        parsed = {"thought": text, "action": "DONE"}
+
+    return parsed
+
+
+# ─── Main report generator with ReAct loop ─────────────────────
+
+def generate_bias_report(stream_callback=None) -> str:
+    """
+    Generate comprehensive bias report using multi-step ReAct reasoning.
     
-    return {
-        'gender': {k: v['avg_silence'] for k, v in data['by_gender'].items()},
-        'caste': {k: v['avg_silence'] for k, v in data['by_caste'].items()},
-        'income': {k: v['avg_silence'] for k, v in data['by_income'].items()}
-    }
-
-def analyze_geography() -> dict:
-    """Analyze geographic bias patterns"""
-    print("   [Tool] Analyzing geography...")
-    data = geographic_breakdown(top_n=10)
+    Args:
+        stream_callback: Optional callable(step_type, message) for streaming updates.
     
-    return {
-        'top_silenced': data['top_silenced'][:5],
-        'worst_ward': data['top_silenced'][0],
-        'best_ward': data['all_wards'][-1]
-    }
+    Returns:
+        Complete analysis report text.
+    """
+    def _emit(step_type, msg):
+        print(f"  [{step_type}] {msg}")
+        if stream_callback:
+            stream_callback(step_type, msg)
 
-def analyze_categories() -> dict:
-    """Analyze complaint type bias"""
-    print("   [Tool] Analyzing complaint categories...")
-    data = complaint_type_analysis()
-    
-    return {
-        'most_ignored': data[0],
-        'least_ignored': data[-1],
-        'all': data
-    }
+    _emit("START", "Autonomous bias investigation initiated")
 
-def analyze_temporal() -> dict:
-    """Analyze temporal decay"""
-    print("   [Tool] Analyzing temporal patterns...")
-    data = temporal_decay_analysis()
-    
-    return {
-        'early': data[0],
-        'late': data[-1],
-        'all': data
-    }
+    llm = get_llm()
+    gathered_data = {}
+    thoughts = []
+    max_steps = len(AGENT_TOOLS) + 1
 
-def get_critical() -> dict:
-    """Get critically silenced complaints"""
-    print("   [Tool] Getting critical complaints...")
-    data = get_silenced_complaints(threshold=80, limit=5)
-    
-    return {
-        'total': len(data),
-        'top_5': [
-            {
-                'text': c['text'],
-                'silence_score': c['silence_score'],
-                'days': c['days_in_system']
-            }
-            for c in data[:5]
-        ]
-    }
+    # ── Phase 1: ReAct data-gathering loop ──
+    for step in range(1, max_steps + 1):
+        _emit("THINK", f"Step {step}: reasoning about next action...")
 
-# GENERATE COMPREHENSIVE ANALYSIS.
+        result = _react_step(llm, gathered_data, step, thoughts)
+        thought = result.get("thought", "")
+        action = result.get("action", "DONE")
 
-def generate_bias_report():
-    """Generate comprehensive bias report using LLM"""
-    
-    print("\n" + "=" * 60)
-    print(" AUTONOMOUS BIAS INVESTIGATION")
-    print("=" * 60)
-    
-    # Gather all data
-    print("\nGathering data...")
-    demographics = analyze_demographics()
-    geography = analyze_geography()
-    categories = analyze_categories()
-    temporal = analyze_temporal()
-    critical = get_critical()
-    
-    # Create comprehensive context for LLM
-    context = f"""
-SILENCE INDEX - CIVIC COMPLAINTS DATA ANALYSIS
+        thoughts.append(f"Step {step}: {thought}")
+        _emit("THOUGHT", thought)
 
-You are an AI analyst investigating institutional bias in civic complaint systems.
-Analyze the following data and provide a comprehensive report.
+        if action == "DONE" or action not in AGENT_TOOLS:
+            _emit("DECIDE", "Agent determined it has enough data. Synthesizing report.")
+            break
 
-KEY FINDINGS:
+        _emit("ACTION", f"Calling tool: {action}")
+        try:
+            data = AGENT_TOOLS[action]["fn"]()
+            gathered_data[action] = data
+            _emit("OBSERVATION", f"Got {action} data ({len(json.dumps(data, default=str))} chars)")
+        except Exception as e:
+            gathered_data[action] = {"error": str(e)}
+            _emit("ERROR", f"Tool {action} failed: {e}")
 
-1. DEMOGRAPHIC BREAKDOWN:
-{json.dumps(demographics, indent=2)}
+    # Fill in anything the agent skipped
+    for tool_name in AGENT_TOOLS:
+        if tool_name not in gathered_data:
+            try:
+                gathered_data[tool_name] = AGENT_TOOLS[tool_name]["fn"]()
+            except Exception:
+                pass
 
-2. GEOGRAPHIC PATTERNS:
-   - Worst ward: {geography['worst_ward']['ward']} (avg silence: {geography['worst_ward']['avg_silence']})
-   - Best ward: {geography['best_ward']['ward']} (avg silence: {geography['best_ward']['avg_silence']})
-   - Top 5 most silenced: {[w['ward'] for w in geography['top_silenced']]}
+    # ── Phase 2: Synthesize the report ──
+    _emit("SYNTHESIZE", "Generating comprehensive analysis report...")
 
-3. COMPLAINT CATEGORIES:
-   - Most ignored: {categories['most_ignored']['category']} ({categories['most_ignored']['silenced_pct']}% silenced)
-   - Least ignored: {categories['least_ignored']['category']} ({categories['least_ignored']['silenced_pct']}% silenced)
+    total = get_total_complaints()
+    demo = gathered_data.get("demographics", {})
+    geo = gathered_data.get("geography", {})
+    cats = gathered_data.get("categories", [])
+    temporal = gathered_data.get("temporal", [])
+    critical = gathered_data.get("critical", [])
 
-4. TEMPORAL DECAY:
-   - Early stage (0-30 days): {temporal['early']['avg_silence']} avg silence
-   - Late stage (300-365 days): {temporal['late']['avg_silence']} avg silence
-   
-5. CRITICAL CASES:
-   - Total with silence > 80: {critical['total']}
-   - Top critical case: {critical['top_5'][0]['text'][:100]}...
-     (Silence: {critical['top_5'][0]['silence_score']}, Days: {critical['top_5'][0]['days']})
+    top_wards = geo.get("top_silenced", [])[:5] if isinstance(geo, dict) else []
+    bottom_wards = (geo.get("all_wards", [])[-3:] if isinstance(geo, dict) else [])
 
-Based on this data, provide a comprehensive analysis including:
-1. Executive summary of institutional bias patterns
-2. Demographic disparities with specific disparity ratios (e.g., "1.23x more silenced")
-3. Geographic hotspots requiring urgent intervention
-4. Temporal analysis showing how complaints are abandoned over time
-5. Top 3 most urgent, actionable recommendations for systemic reform
+    synthesis_prompt = f"""SILENCE INDEX — FORENSIC BIAS INVESTIGATION
 
-Format the report professionally with clear sections and specific numbers.
+Total complaints analysed: {total}
+
+DEMOGRAPHIC DATA:
+{json.dumps(demo, indent=2, default=str)}
+
+GEOGRAPHIC DATA (top 5 worst wards):
+{json.dumps(top_wards, indent=2, default=str)}
+
+GEOGRAPHIC DATA (3 best wards):
+{json.dumps(bottom_wards, indent=2, default=str)}
+
+COMPLAINT CATEGORIES:
+{json.dumps(cats[:5] if isinstance(cats, list) else cats, indent=2, default=str)}
+
+TEMPORAL DECAY:
+{json.dumps(temporal, indent=2, default=str)}
+
+CRITICAL CASES (top 5):
+{json.dumps([{{'text': c.get('text','')[:120], 'silence_score': c.get('silence_score',0), 'days': c.get('days_in_system',0), 'status': c.get('response_status','')}} for c in (critical[:5] if isinstance(critical, list) else [])], indent=2, default=str)}
+
+AGENT REASONING TRAIL:
+{chr(10).join(thoughts)}
+
+Write a comprehensive, markdown-formatted report including:
+1. **Executive Summary** — 3-sentence verdict on institutional bias
+2. **Demographic Disparities** — gender, caste, income with disparity ratios (e.g. "2.1x")
+3. **Geographic Hotspots** — worst wards vs best, zone analysis
+4. **Category Analysis** — which complaint types are most ignored
+5. **Temporal Decay** — how complaints rot over time
+6. **Critical Cases** — 3 most alarming specific complaints
+7. **Recommendations** — 5 actionable systemic reforms
+
+Be specific with numbers. Use markdown headers, bullets, and **bold** for emphasis.
 """
 
-    print("\nGenerating AI-powered analysis with Gemini 2.5 Flash...")
-    print("-" * 60)
-    
-    # Call LLM for analysis
-    llm_instance = get_llm()
-    response = llm_instance.invoke(context)
-    analysis = response.content
-    
-    return analysis
+    response = llm.invoke(synthesis_prompt)
+    report = response.content
+
+    _emit("COMPLETE", "Report generated successfully")
+    return report
+
 
 # MAIN
 
 if __name__ == "__main__":
     try:
         report = generate_bias_report()
-        
+
         print("\n" + "=" * 60)
         print(" AI ANALYSIS REPORT")
         print("=" * 60)
         print(report)
-        
-        # Save report
-        with open('AI_BIAS_REPORT.txt', 'w', encoding='utf-8') as f:
-            f.write("=" * 60 + "\n")
-            f.write("SILENCE INDEX - AI ANALYSIS REPORT\n")
-            f.write("=" * 60 + "\n")
+
+        with open("AI_BIAS_REPORT.md", "w", encoding="utf-8") as f:
             f.write(report)
-        
-        print("\n* Report saved to AI_BIAS_REPORT.txt")
-        
+        print("\n* Report saved to AI_BIAS_REPORT.md")
+
     except Exception as e:
         print(f"[ERROR] {e}")
         import traceback

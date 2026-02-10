@@ -1136,3 +1136,224 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
+
+/* IMAGE UPLOAD */
+.input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.image-upload-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.image-upload-btn:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+    background: rgba(0, 212, 255, 0.08);
+}
+
+.image-preview-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+}
+
+.preview-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+}
+
+.image-file-name {
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.remove-image-btn {
+    background: transparent;
+    border: none;
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.remove-image-btn:hover {
+    background: rgba(255, 107, 107, 0.15);
+}
+
+/* CHAT IMAGE PREVIEW */
+.chat-image-preview {
+    max-width: 220px;
+    max-height: 160px;
+    border-radius: 8px;
+    margin-top: 8px;
+    border: 1px solid var(--border);
+}
+
+/* MULTIMODAL BADGE */
+.multimodal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--cyan);
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* REPORT MARKDOWN RENDERING */
+.report-markdown {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-primary);
+    padding: 20px;
+    overflow-x: auto;
+}
+
+.report-markdown h1,
+.report-markdown h2,
+.report-markdown h3,
+.report-markdown h4 {
+    color: var(--cyan);
+    margin: 20px 0 10px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.report-markdown h1 { font-size: 22px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.report-markdown h2 { font-size: 18px; }
+.report-markdown h3 { font-size: 15px; color: var(--amber); }
+
+.report-markdown p {
+    margin: 8px 0;
+}
+
+.report-markdown ul, .report-markdown ol {
+    margin: 8px 0 8px 20px;
+}
+
+.report-markdown li {
+    margin: 4px 0;
+}
+
+.report-markdown strong {
+    color: var(--amber);
+}
+
+.report-markdown code {
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--success);
+}
+
+.report-markdown pre {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    overflow-x: auto;
+    margin: 10px 0;
+}
+
+.report-markdown pre code {
+    background: none;
+    padding: 0;
+}
+
+.report-markdown table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+}
+
+.report-markdown th,
+.report-markdown td {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    text-align: left;
+}
+
+.report-markdown th {
+    background: var(--bg-tertiary);
+    color: var(--cyan);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.report-markdown hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+}
+
+/* INVESTIGATION STEPS */
+.investigation-steps {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+}
+
+.investigation-steps h4 {
+    color: var(--cyan);
+    margin-bottom: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+}
+
+.investigation-steps ul {
+    list-style: none;
+    padding: 0;
+}
+
+.investigation-steps li {
+    padding: 6px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid rgba(42, 42, 58, 0.5);
+}
+
+.investigation-steps li:last-child {
+    border-bottom: none;
+}
+
+.step-icon {
+    margin-right: 6px;
+}
